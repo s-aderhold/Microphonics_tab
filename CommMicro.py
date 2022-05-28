@@ -25,6 +25,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from pydm import Display
 from qtpy.QtCore import Slot
+from scipy import signal
 from scipy.fftpack import fft, fftfreq
 
 # FFt_math has utility functions
@@ -69,16 +70,18 @@ class MicDisp(Display):
             "Select 1 CM and 1 cavity at a time for commissioning. \nLimit plotted waveforms to 30 sec.")
 
         # create plot canvases and link to GUI elements
-        TopPlot = MplCanvas(self, width=20, height=40, dpi=100)
-        BotPlot = MplCanvas(self, width=20, height=40, dpi=100)
-        self.xfDisp.ui.PlotTop.addWidget(TopPlot)
-        self.xfDisp.ui.PlotBot.addWidget(BotPlot)
+        HistogramPlot = MplCanvas(self, width=20, height=40, dpi=100)
+        FFTPlot = MplCanvas(self, width=20, height=40, dpi=100)
+        SpectrogramPlot = MplCanvas(self, width=20, height=40, dpi=100)
+        self.xfDisp.ui.PlotHistogram.addWidget(HistogramPlot)
+        self.xfDisp.ui.PlotFFT.addWidget(FFTPlot)
+        self.xfDisp.ui.PlotSpectrogram.addWidget(SpectrogramPlot)
 
         # call function setGOVal when strtBut is pressed
-        self.ui.StrtBut.clicked.connect(partial(self.setGOVal, TopPlot, BotPlot))
+        self.ui.StrtBut.clicked.connect(partial(self.setGOVal, HistogramPlot, FFTPlot, SpectrogramPlot))
 
         # call function getOldData when OldDatBut is pressed
-        self.ui.OldDatBut.clicked.connect(partial(self.getOldData, TopPlot, BotPlot))
+        self.ui.OldDatBut.clicked.connect(partial(self.getOldData, HistogramPlot, FFTPlot, SpectrogramPlot))
 
         # This doesn't work yet.
         # call function plotWindow when printPlot is pressed
@@ -161,14 +164,21 @@ class MicDisp(Display):
     #        else:
     #            print('creation of {} failed'.format(fname))
 
-    # This function takes given data (cavUno) and axis handle (tPlot) and calculates FFT and plots
-    def FFTPlot(self, bPlot, cavUno):
+    # This function takes given data (cavUno) and axis handle (fftPlot) and calculates FFT and plots
+    def FFTPlot(self, fftPlot, cavUno):
 
         N = len(cavUno)
         T = 1.0 / (DEFAULT_SAMPLING_RATE / int(self.ui.comboBox_decimation.currentText()))
         yf1 = fft(cavUno)
         xf = fftfreq(N, T)[:N // 2]
-        bPlot.axes.plot(xf, 2.0 / N * np.abs(yf1[0:N // 2]))
+        fftPlot.axes.plot(xf, 2.0 / N * np.abs(yf1[0:N // 2]))
+
+    def spectrogramPlot(self, spectrogramPlot, detuneData):
+
+        data_array = np.array(detuneData)
+        rate = DEFAULT_SAMPLING_RATE / int(self.ui.comboBox_decimation.currentText())
+        f, t, Sxx = signal.spectrogram(data_array, rate)
+        spectrogramPlot.axes.pcolormesh(t, f, Sxx, shading='gouraud')
 
     # This function gets info from the GUI, fills out LASTPATH,
     #  and returns liNac, cmNumStr, cavNumA, cavNumB
@@ -221,7 +231,7 @@ class MicDisp(Display):
     # it takes GUI settings and calls python script to fetch the data
     #  then if Plotting is chosen, it calls getDataBack to make the plot
 
-    def setGOVal(self, tPlot, bPlot):
+    def setGOVal(self, histogramPlot, fftPlot, spectrogramplot):
         global LASTPATH
         return_code = 2
 
@@ -292,7 +302,7 @@ class MicDisp(Display):
                     try:
                         fname = path.join(LASTPATH, outFile)
                         if path.exists(fname):
-                            self.getDataBack(fname, tPlot, bPlot)
+                            self.getDataBack(fname, histogramPlot, fftPlot, spectrogramplot)
                         else:
                             print('file doesnt exist {}'.format(fname))
                     except:
@@ -316,10 +326,10 @@ class MicDisp(Display):
         return ()
 
     # This function prompts the user for a file with data to plot
-    #  then calls getDataBack to plot it to axes tPlot and bPlot
-    #  The inputs of tPlot and bPlot are passed through to getDataBack
+    #  then calls getDataBack to plot it to axes histogramPlot and fftPlot
+    #  The inputs of histogramPlot and fftPlot are passed through to getDataBack
 
-    def getOldData(self, tPlot, bPlot):
+    def getOldData(self, histogramPlot, fftPlot, spectrogramPlot):
         global LASTPATH
 
         # clear message box in case there's anything still there
@@ -333,14 +343,14 @@ class MicDisp(Display):
         fileDial = QFileDialog()
         fname_tuple = fileDial.getOpenFileName(None, 'Open File?', LASTPATH, '')
         if fname_tuple[0] != '':
-            self.getDataBack(fname_tuple[0], tPlot, bPlot)
+            self.getDataBack(fname_tuple[0], histogramPlot, fftPlot, spectrogramPlot)
 
         return ()
 
     # This function eats the data from filename fname and plots
-    #  a waterfall plot to axis tPlot and an FFT to axis bPlot
+    #  a waterfall plot to axis histogramPlot and an FFT to axis fftPlot
 
-    def getDataBack(self, fname, tPlot, bPlot):
+    def getDataBack(self, fname, histogramPlot, fftPlot, spectrogramPlot):
 
         cavDataList = []
 
@@ -357,37 +367,45 @@ class MicDisp(Display):
                 if part.startswith('cav'):
                     cavnums = str(part[3:])
 
-            tPlot.axes.cla()
-            bPlot.axes.cla()
+            histogramPlot.axes.cla()
+            fftPlot.axes.cla()
+            spectrogramPlot.axes.cla()
             leGend = []
             leGend2 = []
 
             for idx, cavData in enumerate(cavDataList):
                 if len(cavData) > 0:
                     leGend.append('Cav' + cavnums[idx])
-                    tPlot.axes.hist(cavData, bins=140,
-                                    histtype='step', log='True')
+                    histogramPlot.axes.hist(cavData, bins=140,
+                                            histtype='step', log='True')
 
                     leGend2.append('Cav' + cavnums[idx])
-                    self.FFTPlot(bPlot, cavData)
+                    self.FFTPlot(fftPlot, cavData)
+                    self.spectrogramPlot(spectrogramPlot, cavData)
 
             # put file name on the plot
             parts = fname.split('/')
-            tPlot.axes.set_title(parts[-1], loc='left', fontsize='small')
+            histogramPlot.axes.set_title(parts[-1], loc='left', fontsize='small')
             # tPlot.axes.set_xlim(-200, 200)
-            tPlot.axes.set_ylim(bottom=1)
-            tPlot.axes.set_xlabel('Detune (Hz)')
-            tPlot.axes.set_ylabel('Counts')
-            tPlot.axes.grid(True)
-            tPlot.axes.legend(leGend)
-            tPlot.draw_idle()
+            histogramPlot.axes.set_ylim(bottom=1)
+            histogramPlot.axes.set_xlabel('Detune (Hz)')
+            histogramPlot.axes.set_ylabel('Counts')
+            histogramPlot.axes.grid(True)
+            histogramPlot.axes.legend(leGend)
+            histogramPlot.draw_idle()
 
-            bPlot.axes.set_xlim(0, 150)
-            bPlot.axes.set_xlabel('Frequency (Hz)')
-            bPlot.axes.set_ylabel('Relative Amplitude')
-            bPlot.axes.grid(True)
-            bPlot.axes.legend(leGend2)
-            bPlot.draw_idle()
+            fftPlot.axes.set_xlim(0, 150)
+            fftPlot.axes.set_xlabel('Frequency (Hz)')
+            fftPlot.axes.set_ylabel('Relative Amplitude')
+            fftPlot.axes.grid(True)
+            fftPlot.axes.legend(leGend2)
+            fftPlot.draw_idle()
+
+            spectrogramPlot.axes.set_ylim(0, 150)
+            spectrogramPlot.axes.set_xlabel('Time (sec)')
+            spectrogramPlot.axes.set_ylabel('Frequency (Hz)')
+            spectrogramPlot.draw_idle()
+
             self.showDisplay(self.xfDisp)
 
         else:
