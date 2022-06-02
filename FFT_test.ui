@@ -278,20 +278,14 @@
            </item>
           </layout>
          </item>
+         <item>
+          <widget class="QLabel" name="label_message">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
         </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="AcqProg">
-        <property name="text">
-         <string/>
-        </property>
-        <property name="textFormat">
-         <enum>Qt::PlainText</enum>
-        </property>
-        <property name="scaledContents">
-         <bool>true</bool>
-        </property>
        </widget>
       </item>
      </layout>

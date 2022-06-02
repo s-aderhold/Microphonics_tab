@@ -11,7 +11,6 @@ $DATA_DIR_PATH/ACCL_LxB_CM00/yyyy/mm/dd/filename
 add cm # to filename with -F switch
 """
 
-# for ceil
 import subprocess
 import sys
 from datetime import datetime
@@ -35,17 +34,16 @@ BUFFER_LENGTH = 16384
 DEFAULT_SAMPLING_RATE = 2000
 
 LASTPATH = ''
-DEBUG = 1
 DATA_DIR_PATH = "/u1/lcls/physics/rf_lcls2/microphonics/"
 
 
 class MplCanvas(FigureCanvasQTAgg):
-    # MPLCanvas is the class for the 'canvas' that plots are drawn on and then mapped to the ui
-    # They are Figure format described in matplotlib 2.2 documentation
+    """ MPLCanvas is the class for the 'canvas' that plots are drawn on and then mapped to the ui
+        They are Figure format described in matplotlib 2.2 documentation """
 
     def __init__(self, parent=None, width=5, height=4, dpi=100):
         fig = Figure(figsize=(width, height), dpi=dpi, tight_layout="true")
-        # one axes per layout
+        # one axis per layout
         self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
 
@@ -64,10 +62,6 @@ class MicDisp(Display):
 
         # link up to the secondary display
         self.xfDisp = Display(ui_filename=getPath("MicPlot.ui"))
-
-        # Show message on gui
-        self.ui.AcqProg.setText(
-            "Select 1 CM and 1 cavity at a time for commissioning. \nLimit plotted waveforms to 30 sec.")
 
         # create plot canvases and link to GUI elements
         HistogramPlot = MplCanvas(self, width=20, height=40, dpi=100)
@@ -107,33 +101,32 @@ class MicDisp(Display):
         self.ui.CavComboBox.activated.connect(self.ChangeCav)
 
         # initialize checkbox counter
-        self.counter = 1
+        self.num_channels = 1
 
         self.ui.comboBox_decimation.currentIndexChanged.connect(self.update_daq_setting)
         self.ui.spinBox_buffers.valueChanged.connect(self.update_daq_setting)
         self.update_daq_setting()
 
-        self.ui.cb1.stateChanged.connect(self.update_counter)
-        self.ui.cb2.stateChanged.connect(self.update_counter)
-        self.ui.cb3.stateChanged.connect(self.update_counter)
-        self.ui.cb4.stateChanged.connect(self.update_counter)
+        self.ui.cb1.stateChanged.connect(self.update_channel_counter)
+        self.ui.cb2.stateChanged.connect(self.update_channel_counter)
+        self.ui.cb3.stateChanged.connect(self.update_channel_counter)
+        self.ui.cb4.stateChanged.connect(self.update_channel_counter)
 
     def update_daq_setting(self):
 
         number_of_buffers = int(self.ui.spinBox_buffers.value())
-        decimation = int(self.ui.comboBox_decimation.currentText())
-        sampling_rate = DEFAULT_SAMPLING_RATE / decimation
-        number_of_channels = self.counter
+        decimation_num = int(self.ui.comboBox_decimation.currentText())
+        sampling_rate = DEFAULT_SAMPLING_RATE / decimation_num
         self.ui.label_samplingrate.setNum(sampling_rate)
         self.ui.label_acq_time.setNum(
-            BUFFER_LENGTH * decimation * number_of_buffers / (sampling_rate * number_of_channels))
+            BUFFER_LENGTH * decimation_num * number_of_buffers / (sampling_rate * self.num_channels))
 
     @Slot(int)
-    def update_counter(self, state):
+    def update_channel_counter(self, state):
         if state == Qt.Unchecked:
-            self.counter -= 1
+            self.num_channels -= 1
         elif state == Qt.Checked:
-            self.counter += 1
+            self.num_channels += 1
         self.update_daq_setting()
 
     def ChangeCav(self):
@@ -147,31 +140,14 @@ class MicDisp(Display):
         for idx, cb in enumerate(self.checkboxes):
             cb.setText(str(idx + delta))
 
-    # This doesn't work yet
-    # Function to print the window
-    #    def plotWindow(self):
-    #        fname='plot.png'
-    #        app = QtWidgets.QApplication(sys.argv)
-    #        screen = QtWidgets.QApplication.primaryScreen()
-    #        screenshot = screen.grabWindow()
-    #        QScreen.grabWindow(app.primaryScreen(),
-    #          QApplication.desktop().winId()).save(fname,'png')
-    #        if path.exists(fname) and path.getsize(fname):
-    #            try:
-    #                system('lpr -Pphysics-lcls2log '+fname)
-    #            except:
-    #                print('Unable to print {} with apologies'.format(fname))
-    #        else:
-    #            print('creation of {} failed'.format(fname))
-
-    # This function takes given data (cavUno) and axis handle (fftPlot) and calculates FFT and plots
+    # This function takes given data (cavUno) and axis handle (tPlot) and calculates FFT and plots
     def FFTPlot(self, fftPlot, cavUno):
 
-        N = len(cavUno)
-        T = 1.0 / (DEFAULT_SAMPLING_RATE / int(self.ui.comboBox_decimation.currentText()))
+        num_points = len(cavUno)
+        sample_spacing = 1.0 / (DEFAULT_SAMPLING_RATE / int(self.ui.comboBox_decimation.currentText()))
         yf1 = fft(cavUno)
-        xf = fftfreq(N, T)[:N // 2]
-        fftPlot.axes.plot(xf, 2.0 / N * np.abs(yf1[0:N // 2]))
+        xf = fftfreq(num_points, sample_spacing)[:num_points // 2]
+        fftPlot.axes.plot(xf, 2.0 / num_points * np.abs(yf1[0:num_points // 2]))
 
     def spectrogramPlot(self, spectrogramPlot, detuneData):
 
@@ -197,7 +173,7 @@ class MicDisp(Display):
         cmid = self.ui.CMComboBox.currentText()
 
         # grab the LxB part
-        liNac = cmid.split(':')[1]
+        linac = cmid.split(':')[1]
 
         # grab the CM number
         cmNumStr = cmid.split(':')[2]
@@ -217,7 +193,7 @@ class MicDisp(Display):
 
         # Make the path name to be nice
         #        LASTPATH=DATA_DIR_PATH+'ACCL_'+liNac+'_'+cmNumStr+cavNumStr[0]+'0'
-        LASTPATH = path.join(DATA_DIR_PATH, 'ACCL_' + liNac + '_' + cmNumStr + '00')
+        LASTPATH = path.join(DATA_DIR_PATH, 'ACCL_' + linac + '_' + cmNumStr + '00')
 
         # get today's date as 2- or 4-char strings
         year = str(self.startd.year)
@@ -225,7 +201,7 @@ class MicDisp(Display):
         day = '%02d' % self.startd.day
         LASTPATH = path.join(LASTPATH, year, month, day)
 
-        return liNac, cmNumStr, cavNumStr
+        return linac, cmNumStr, cavNumStr
 
     # setGOVal is the response to the Get New Measurement button push
     # it takes GUI settings and calls python script to fetch the data
@@ -236,17 +212,17 @@ class MicDisp(Display):
         return_code = 2
 
         # reads GUI inputs, fills out LASTPATH, and returns LxB, CMxx, and cav num
-        liNac, cmNumSt, cavNumStr = self.getUserVal()
+        linac, cmNumSt, cavNumStr = self.getUserVal()
 
-        self.ui.AcqProg.setText("Data acquisition started\n")
-        self.ui.AcqProg.repaint()
+        self.ui.label_message.setText("Data acquisition started\n")
+        self.ui.label_message.repaint()
 
         resScrptSrce = "/usr/local/lcls/package/lcls2_llrf/srf/software/res_ctl/res_data_acq.py"
 
         # made the channel access spec for script call
         rack = self.ui.CavComboBox.currentIndex()
         AB = 'AB'
-        caCmd = "ca://ACCL:" + liNac + ":" + str(cmNumSt) + "00:RES" + AB[rack] + ":"
+        caCmd = "ca://ACCL:" + linac + ":" + str(cmNumSt) + "00:RES" + AB[rack] + ":"
 
         # LASTPATH in this case ultimately looks like:
         #  /u1/lcls/physics/rf_lcls2/microphonics/ACCL_L0B_0110/ACCL_L0B_0110_20220329_151328
@@ -257,29 +233,25 @@ class MicDisp(Display):
 
         numbWaveF = str(self.ui.spinBox_buffers.value())
 
-        wsp = str(self.ui.comboBox_decimation.currentText())
+        decimation_str = str(self.ui.comboBox_decimation.currentText())
 
         # LASTPATH is the directory to put the datafile compliments of getUserVal()
         # Need to make output file name
         # Sergio had res_cav#_c#_yyyymmdd_hhmmss
         # Go to res_cm##_cav####_c#_yyyymmdd_hhmmss
 
-        s1 = datetime.now().strftime("%Y%m%d" + "_" + "%H%M%S")
-        outFile = 'res_CM' + cmNumSt + '_cav' + cavNumStr + '_c' + str(numbWaveF) + '_' + s1
-        # print(outFile)
-        # print(cavNumStr)
+        timestamp = datetime.now().strftime("%Y%m%d" + "_" + "%H%M%S")
+        outFile = 'res_CM' + cmNumSt + '_cav' + cavNumStr + '_c' + str(numbWaveF) + '_' + timestamp
 
-        # cmdList= ['python',resScrptSrce,'-D',str(LASTPATH),'-a',caCmd,'-wsp','2','-acav',str(cavNums),'-ch','DF',
-        # '-c',numbWaveF,'-F',outFile]
-        cmdList = ['python', resScrptSrce, '-D', str(LASTPATH), '-a', caCmd, '-wsp', wsp, '-acav']
+        cmdList = ['python', resScrptSrce, '-D', str(LASTPATH), '-a', caCmd, '-wsp', decimation_str, '-acav']
         for cav in cavNumStr:
             cmdList += cav
         cmdList += ['-ch', 'DF', '-c', numbWaveF, '-F', outFile]
         print(cmdList)
 
         try:
-            self.ui.AcqProg.setText("Data acquisition started\n")
-            self.ui.AcqProg.repaint()
+            self.ui.label_message.setText("Data acquisition started\n")
+            self.ui.label_message.repaint()
             process = subprocess.Popen(cmdList, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             out, err = process.communicate()
             return_code = process.poll()
@@ -289,13 +261,12 @@ class MicDisp(Display):
             print('Out: {}'.format(out))
             if len(err) > 0:
                 print('Err: {}'.format(err))
-            self.ui.AcqProg.setText("{}".format(out))
-            self.ui.AcqProg.repaint()
-            # success!
-            #                print('about to if-else with return_code {}'.format(return_code))
+            self.ui.label_message.setText("{}".format(out))
+            self.ui.label_message.repaint()
+
             if return_code == 0:
-                self.ui.AcqProg.setText("File saved at \n" + LASTPATH)
-                self.ui.AcqProg.repaint()
+                self.ui.label_message.setText("File saved at \n" + LASTPATH)
+                self.ui.label_message.repaint()
 
                 # user requesting that plots be made
                 if self.ui.PlotComboBox.currentIndex() == 0:
@@ -310,18 +281,19 @@ class MicDisp(Display):
 
             # unsuccess - if return_code != 0
             else:
-                print('return code is not0')
+                print('return code is not 0')
+
                 e = subprocess.CalledProcessError(return_code, cmdList, output=out)
                 e.stdout, e.stderr = out, err
-                self.ui.AcqProg.setText(
+                self.ui.label_message.setText(
                     "Call to microphonics script failed \nreturn code: {}\nstderr: {}".format(return_code,
                                                                                               str(e.stderr)))
-                self.ui.AcqProg.repaint()
+                self.ui.label_message.repaint()
                 print('stdout {0} stderr {1} return_code {2}'.format(e.stdout, e.stderr, return_code))
         except:
             print('You are exceptional')
-            self.ui.AcqProg.setText("Call to microphonics script failed \n")
-            self.ui.AcqProg.repaint()
+            self.ui.label_message.setText("Call to microphonics script failed \n")
+            self.ui.label_message.repaint()
 
         return ()
 
@@ -333,8 +305,8 @@ class MicDisp(Display):
         global LASTPATH
 
         # clear message box in case there's anything still there
-        self.ui.AcqProg.setText("Choose previous data file.")
-        self.ui.AcqProg.adjustSize()
+        self.ui.label_message.setText("Choose previous data file.")
+        self.ui.label_message.adjustSize()
 
         # getUserVal sets LASTPATH from user input on the GUI
         liNac, cmNumSt, cavNumStr = self.getUserVal()
