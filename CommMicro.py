@@ -21,7 +21,6 @@ from functools import partial
 from os import makedirs, path, system
 
 import numpy as np
-import physicselog
 from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import (QFileDialog, QWidget)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
@@ -77,8 +76,6 @@ class MicDisp(Display):
         # call function getOldData when OldDatBut is pressed
         self.ui.OldDatBut.clicked.connect(partial(self.getOldData, topPlot, botPlot))
 
-        # call function plotWindow when printPushButton is pressed
-        self.xfDisp.ui.printPushButton.clicked.connect(self.plotWindow)
 
         # get CM IDs from FFt_math
         self.CM_IDs = FFt_math.CM_IDs()
@@ -373,6 +370,3 @@ class MicDisp(Display):
         screenshot.save('/tmp/srf_micro.png', 'png')
         system('convert /tmp/srf_micro.png /tmp/srf_micro.ps')
 
-        physicselog.submit_entry("lcls2", "MicrophonicsGui",
-                                 "Microphonics Data " + self.filNam, None,
-                                 "/tmp/srf_micro.ps", None)
